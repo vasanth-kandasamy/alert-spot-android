@@ -107,7 +107,10 @@ fun EditLocationScreen(
                     cameraPositionState = cameraPositionState,
                     properties = MapProperties(),
                     uiSettings = MapUiSettings(
-                        allGesturesEnabled = false,
+                        scrollGesturesEnabled = false,
+                        zoomGesturesEnabled = false,
+                        tiltGesturesEnabled = false,
+                        rotationGesturesEnabled = false,
                         compassEnabled = false,
                         mapToolbarEnabled = false,
                         myLocationButtonEnabled = false,

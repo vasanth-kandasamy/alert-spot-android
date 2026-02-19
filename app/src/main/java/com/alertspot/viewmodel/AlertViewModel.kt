@@ -65,6 +65,14 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
     private var searchJob: Job? = null
     private var locationCallback: LocationCallback? = null
 
+    private val geofencePendingIntent: PendingIntent by lazy {
+        val intent = Intent(getApplication(), GeofenceBroadcastReceiver::class.java)
+        PendingIntent.getBroadcast(
+            getApplication(), 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+    }
+
     // MARK: - Proximity Tiers (mirrors iOS)
 
     enum class ProximityTier(
@@ -242,14 +250,6 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun removeAllGeofences() {
         geofencingClient.removeGeofences(geofencePendingIntent)
-    }
-
-    private val geofencePendingIntent: PendingIntent by lazy {
-        val intent = Intent(getApplication(), GeofenceBroadcastReceiver::class.java)
-        PendingIntent.getBroadcast(
-            getApplication(), 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        )
     }
 
     // MARK: - Alarm

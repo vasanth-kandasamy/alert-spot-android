@@ -27,7 +27,6 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
         if (fineGranted) {
-            // Request background location separately (Android 11+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             }
@@ -55,10 +54,13 @@ class MainActivity : ComponentActivity() {
 
             AlertSpotTheme(darkTheme = isDarkMode) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation(viewModel = alertViewModel)
+                    AppNavigation(alertViewModel)
 
                     if (isAlarmPlaying) {
-                        AlarmOverlay(viewModel = alertViewModel)
+                        AlarmOverlay(
+                            locationName = "",
+                            onStop = { alertViewModel.stopAlarm() }
+                        )
                     }
                 }
             }
@@ -66,14 +68,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestPermissions() {
-        // Location permissions
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
         locationPermissionLauncher.launch(permissions.toTypedArray())
 
-        // Notification permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
