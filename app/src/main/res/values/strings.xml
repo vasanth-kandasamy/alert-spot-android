@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AlertSpot</string>
+    <string name="channel_alarm">Alarm Notifications</string>
+    <string name="channel_alarm_desc">Loud alerts when you reach a destination</string>
+    <string name="channel_service">Location Tracking</string>
+    <string name="channel_service_desc">Keeps location monitoring active</string>
+</resources>
