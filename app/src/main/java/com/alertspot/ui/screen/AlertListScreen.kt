@@ -1,15 +1,22 @@
 package com.alertspot.ui.screen
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.alertspot.ui.component.AlertRow
+import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,13 +31,23 @@ fun AlertListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Alerts") },
-                actions = {
-                    IconButton(onClick = onAddAlert) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Alert")
-                    }
-                }
+                title = {
+                    Text("Alerts", fontWeight = FontWeight.Bold)
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddAlert,
+                shape = CircleShape,
+                containerColor = Blue,
+                contentColor = androidx.compose.ui.graphics.Color.White
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Alert")
+            }
         }
     ) { padding ->
         if (locations.isEmpty()) {
@@ -41,31 +58,56 @@ fun AlertListScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                ) {
                     Icon(
-                        Icons.Default.NotificationsOff,
+                        Icons.Outlined.NotificationsOff,
                         contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        modifier = Modifier.size(72.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        "No Alerts",
+                        "No Alerts Yet",
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Tap + to add a location alert.",
+                        "Add your first location alert and get notified when you arrive.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        textAlign = TextAlign.Center
                     )
                 }
             }
         } else {
-            // Alert list
-            Column(modifier = Modifier.padding(padding)) {
-                locations.forEachIndexed { index, location ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp)
+            ) {
+                // Swipe hint
+                item(key = "__hint__") {
+                    Text(
+                        text = "Swipe left to delete · Swipe right to edit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                items(
+                    items = locations,
+                    key = { it.id }
+                ) { location ->
                     AlertRow(
                         location = location,
                         distance = if (location.isEnabled) viewModel.formattedDistance(location) else null,
@@ -74,12 +116,6 @@ fun AlertListScreen(
                         onEdit = { onEditAlert(location.id) },
                         onDelete = { viewModel.deleteLocation(location) }
                     )
-                    if (index < locations.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    }
                 }
             }
         }
