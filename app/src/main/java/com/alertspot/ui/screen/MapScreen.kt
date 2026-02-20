@@ -10,13 +10,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.alertspot.ui.component.OsmCircle
+import com.alertspot.ui.component.OsmMapView
+import com.alertspot.ui.component.OsmMarker
 import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
+import org.osmdroid.util.GeoPoint
 
 @Composable
 fun MapScreen(
@@ -26,81 +25,52 @@ fun MapScreen(
     val locations by viewModel.locations.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
 
-    // Default: center of India, overridden by user location
-    val defaultPosition = LatLng(20.5937, 78.9629)
+    val defaultPosition = GeoPoint(20.5937, 78.9629)
     val startPosition = currentLocation?.let {
-        LatLng(it.latitude, it.longitude)
+        GeoPoint(it.latitude, it.longitude)
     } ?: defaultPosition
 
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(startPosition, 12f)
-    }
-
-    // Center on user location once available
+    var mapCenter by remember { mutableStateOf(startPosition) }
     var hasCenteredOnUser by remember { mutableStateOf(false) }
     LaunchedEffect(currentLocation) {
         if (!hasCenteredOnUser && currentLocation != null) {
             hasCenteredOnUser = true
-            val pos = LatLng(currentLocation!!.latitude, currentLocation!!.longitude)
-            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(pos, 14f))
+            mapCenter = GeoPoint(currentLocation!!.latitude, currentLocation!!.longitude)
+        }
+    }
+
+    val markers = remember(locations) {
+        locations.filter { it.isEnabled }.map { location ->
+            OsmMarker(
+                position = GeoPoint(location.latitude, location.longitude),
+                title = location.name,
+                snippet = viewModel.formattedDistance(location) ?: ""
+            )
+        }
+    }
+
+    val circles = remember(locations) {
+        locations.filter { it.isEnabled }.map { location ->
+            OsmCircle(
+                center = GeoPoint(location.latitude, location.longitude),
+                radiusMeters = location.radius,
+                fillColor = Blue.copy(alpha = 0.10f),
+                strokeColor = Blue.copy(alpha = 0.35f),
+                strokeWidth = 3f
+            )
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        GoogleMap(
+        OsmMapView(
             modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = true),
-            uiSettings = MapUiSettings(
-                myLocationButtonEnabled = true,
-                compassEnabled = true,
-                mapToolbarEnabled = false
-            )
-        ) {
-            locations.filter { it.isEnabled }.forEach { location ->
-                val position = LatLng(location.latitude, location.longitude)
+            center = mapCenter,
+            zoom = 14.0,
+            markers = markers,
+            circles = circles,
+            gesturesEnabled = true
+        )
 
-                // Radius circle
-                Circle(
-                    center = position,
-                    radius = location.radius,
-                    fillColor = Blue.copy(alpha = 0.10f),
-                    strokeColor = Blue.copy(alpha = 0.35f),
-                    strokeWidth = 3f
-                )
-
-                // Pin marker
-                val distance = viewModel.formattedDistance(location) ?: ""
-                val snippet = if (distance.isNotEmpty()) "Distance: $distance" else ""
-
-                MarkerInfoWindowContent(
-                    state = MarkerState(position = position),
-                    title = location.name,
-                    snippet = snippet
-                ) { marker ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(8.dp)
-                    ) {
-                        Text(
-                            text = marker.title ?: "",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        if (distance.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = distance,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Blue,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Floating add button
         FloatingActionButton(
             onClick = onAddAlert,
             containerColor = Blue,

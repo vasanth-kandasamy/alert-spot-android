@@ -5,7 +5,6 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Geocoder
 import android.location.Location
 import android.os.Looper
 import android.util.Log
@@ -19,10 +18,11 @@ import com.alertspot.model.GeofenceLocation
 import com.alertspot.model.SearchResult
 import com.alertspot.service.GeofenceBroadcastReceiver
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.util.*
+import org.json.JSONObject
+import java.net.URL
+import java.net.URLEncoder
 
 class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -414,7 +414,7 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // MARK: - Location Search
+    // MARK: - Location Search (Photon — powered by OpenStreetMap)
 
     fun search(query: String) {
         searchJob?.cancel()
@@ -426,23 +426,36 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
             delay(300)  // debounce
             withContext(Dispatchers.IO) {
                 try {
-                    @Suppress("DEPRECATION")
-                    val geocoder = Geocoder(getApplication(), Locale.getDefault())
-                    val addresses = geocoder.getFromLocationName(query, 10) ?: emptyList()
-                    val results = addresses.mapNotNull { address ->
-                        val title = address.featureName
-                            ?: address.getAddressLine(0)
-                            ?: return@mapNotNull null
-                        SearchResult(
-                            title = title,
-                            subtitle = address.getAddressLine(0) ?: "",
-                            latitude = address.latitude,
-                            longitude = address.longitude
-                        )
+                    val encoded = URLEncoder.encode(query, "UTF-8")
+                    val url = "https://photon.komoot.io/api/?q=$encoded&limit=10"
+                    val json = URL(url).readText()
+                    val root = JSONObject(json)
+                    val features = root.getJSONArray("features")
+                    val results = mutableListOf<SearchResult>()
+                    for (i in 0 until features.length()) {
+                        val feature = features.getJSONObject(i)
+                        val geometry = feature.getJSONObject("geometry")
+                        val coords = geometry.getJSONArray("coordinates")
+                        val lng = coords.getDouble(0)
+                        val lat = coords.getDouble(1)
+                        val props = feature.getJSONObject("properties")
+                        val name = props.optString("name", "")
+                        val city = props.optString("city", "")
+                        val state = props.optString("state", "")
+                        val country = props.optString("country", "")
+                        val title = name.ifBlank {
+                            listOf(city, state, country).filter { it.isNotBlank() }.joinToString(", ")
+                        }
+                        val subtitle = listOf(city, state, country)
+                            .filter { it.isNotBlank() && it != title }
+                            .joinToString(", ")
+                        if (title.isNotBlank()) {
+                            results.add(SearchResult(title, subtitle, lat, lng))
+                        }
                     }
                     _searchResults.value = results
                 } catch (e: Exception) {
-                    Log.e(TAG, "Geocoding failed", e)
+                    Log.e(TAG, "Photon search failed", e)
                     _searchResults.value = emptyList()
                 }
             }
@@ -453,15 +466,27 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
         _searchResults.value = emptyList()
     }
 
-    /** Reverse geocode a coordinate to a human-readable name. */
+    /** Reverse geocode a coordinate using Nominatim (OpenStreetMap). */
     suspend fun reverseGeocode(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
         try {
-            @Suppress("DEPRECATION")
-            val geocoder = Geocoder(getApplication(), Locale.getDefault())
-            val addresses = geocoder.getFromLocation(lat, lng, 1)
-            addresses?.firstOrNull()?.let { address ->
-                address.featureName ?: address.locality ?: address.getAddressLine(0)
+            val url = "https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&zoom=18&addressdetails=1"
+            val connection = java.net.HttpURLConnection::class.java.cast(
+                URL(url).openConnection()
+            )!!.apply {
+                setRequestProperty("User-Agent", "AlertSpot-Android/1.0")
             }
+            val json = connection.inputStream.bufferedReader().readText()
+            val root = JSONObject(json)
+            val displayName = root.optString("display_name", "")
+            val address = root.optJSONObject("address")
+            // Try to get a short, meaningful name
+            val name = address?.optString("amenity", "")
+                ?.ifBlank { address.optString("building", "") }
+                ?.ifBlank { address.optString("road", "") }
+                ?.ifBlank { address.optString("suburb", "") }
+                ?.ifBlank { address.optString("city", "") }
+                ?.ifBlank { null }
+            name ?: displayName.split(",").firstOrNull()?.trim()
         } catch (e: Exception) {
             Log.e(TAG, "Reverse geocoding failed", e)
             null

@@ -12,11 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.alertspot.ui.component.OsmCircle
+import com.alertspot.ui.component.OsmMapView
+import com.alertspot.ui.component.OsmMarker
 import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
+import org.osmdroid.util.GeoPoint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,29 +36,18 @@ fun EditLocationScreen(
     var notificationMessage by remember { mutableStateOf(location.notificationMessage ?: "") }
     var radius by remember { mutableFloatStateOf(location.radius.toFloat()) }
 
-    // Camera position adjusts to show radius
-    val position = LatLng(location.latitude, location.longitude)
+    val position = GeoPoint(location.latitude, location.longitude)
     val zoomForRadius = remember(radius) {
-        // Approximate zoom level that shows the radius circle well
-        val metersPerDp = radius * 2.5 // show ~2.5x radius on screen
+        val metersPerDp = radius * 2.5
         when {
-            metersPerDp < 500   -> 16f
-            metersPerDp < 1000  -> 15f
-            metersPerDp < 2000  -> 14f
-            metersPerDp < 5000  -> 13f
-            metersPerDp < 10000 -> 12f
-            metersPerDp < 25000 -> 11f
-            else -> 10f
+            metersPerDp < 500   -> 16.0
+            metersPerDp < 1000  -> 15.0
+            metersPerDp < 2000  -> 14.0
+            metersPerDp < 5000  -> 13.0
+            metersPerDp < 10000 -> 12.0
+            metersPerDp < 25000 -> 11.0
+            else -> 10.0
         }
-    }
-
-    val cameraPositionState = rememberCameraPositionState {
-        this.position = CameraPosition.fromLatLngZoom(position, zoomForRadius)
-    }
-
-    // Update camera when radius changes
-    LaunchedEffect(zoomForRadius) {
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(position, zoomForRadius)
     }
 
     Scaffold(
@@ -102,33 +92,24 @@ fun EditLocationScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                GoogleMap(
+                OsmMapView(
                     modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = cameraPositionState,
-                    properties = MapProperties(),
-                    uiSettings = MapUiSettings(
-                        scrollGesturesEnabled = false,
-                        zoomGesturesEnabled = false,
-                        tiltGesturesEnabled = false,
-                        rotationGesturesEnabled = false,
-                        compassEnabled = false,
-                        mapToolbarEnabled = false,
-                        myLocationButtonEnabled = false,
-                        zoomControlsEnabled = false
-                    )
-                ) {
-                    Circle(
-                        center = position,
-                        radius = radius.toDouble(),
-                        fillColor = Blue.copy(alpha = 0.12f),
-                        strokeColor = Blue.copy(alpha = 0.4f),
-                        strokeWidth = 3f
-                    )
-                    Marker(
-                        state = MarkerState(position = position),
-                        title = name
-                    )
-                }
+                    center = position,
+                    zoom = zoomForRadius,
+                    markers = listOf(
+                        OsmMarker(position = position, title = name)
+                    ),
+                    circles = listOf(
+                        OsmCircle(
+                            center = position,
+                            radiusMeters = radius.toDouble(),
+                            fillColor = Blue.copy(alpha = 0.12f),
+                            strokeColor = Blue.copy(alpha = 0.4f),
+                            strokeWidth = 3f
+                        )
+                    ),
+                    gesturesEnabled = false
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))

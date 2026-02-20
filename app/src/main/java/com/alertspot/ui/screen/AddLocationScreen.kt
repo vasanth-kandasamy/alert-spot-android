@@ -15,18 +15,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alertspot.model.GeofenceLocation
+import com.alertspot.ui.component.OsmCircle
+import com.alertspot.ui.component.OsmMapView
 import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
+import org.osmdroid.util.GeoPoint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,17 +43,11 @@ fun AddLocationScreen(
     var radius by remember { mutableFloatStateOf(2000f) }
 
     val defaultPosition = currentLocation?.let {
-        LatLng(it.latitude, it.longitude)
-    } ?: LatLng(20.5937, 78.9629)
-
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(defaultPosition, 14f)
-    }
+        GeoPoint(it.latitude, it.longitude)
+    } ?: GeoPoint(20.5937, 78.9629)
 
     // Track map center as selected coordinate
-    val selectedCoordinate by remember {
-        derivedStateOf { cameraPositionState.position.target }
-    }
+    var mapCenter by remember { mutableStateOf(defaultPosition) }
 
     val scope = rememberCoroutineScope()
 
@@ -69,77 +63,75 @@ fun AddLocationScreen(
             )
         }
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Map layer
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                properties = MapProperties(isMyLocationEnabled = true),
-                uiSettings = MapUiSettings(
-                    myLocationButtonEnabled = true,
-                    compassEnabled = true,
-                    mapToolbarEnabled = false,
-                    zoomControlsEnabled = false
-                )
-            ) {
-                // Radius circle follows map center
-                Circle(
-                    center = selectedCoordinate,
-                    radius = radius.toDouble(),
-                    fillColor = Blue.copy(alpha = 0.12f),
-                    strokeColor = Blue.copy(alpha = 0.4f),
-                    strokeWidth = 3f
-                )
-            }
-
-            // Center pin (fixed in screen center)
-            Icon(
-                Icons.Default.LocationOn,
-                contentDescription = "Pin",
-                tint = Color.Red,
+            // Search bar
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { value ->
+                    searchText = value
+                    viewModel.search(value)
+                    showSearchResults = value.isNotEmpty()
+                },
+                placeholder = { Text("Search for a place") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (searchText.isNotEmpty()) {
+                        IconButton(onClick = {
+                            searchText = ""
+                            showSearchResults = false
+                            viewModel.clearSearchResults()
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
                 modifier = Modifier
-                    .size(48.dp)
-                    .align(Alignment.Center)
-                    .offset(y = (-24).dp) // anchor at bottom of icon
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp)
             )
 
-            // Overlays
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Search bar
-                OutlinedTextField(
-                    value = searchText,
-                    onValueChange = { value ->
-                        searchText = value
-                        viewModel.search(value)
-                        showSearchResults = value.isNotEmpty()
-                    },
-                    placeholder = { Text("Search for a place") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (searchText.isNotEmpty()) {
-                            IconButton(onClick = {
-                                searchText = ""
-                                showSearchResults = false
-                                viewModel.clearSearchResults()
-                            }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
+            // Map area (fills space between search bar and bottom card)
+            Box(modifier = Modifier.weight(1f).clipToBounds()) {
+                // Map layer
+                OsmMapView(
+                    modifier = Modifier.fillMaxSize(),
+                    center = mapCenter,
+                    zoom = 14.0,
+                    circles = listOf(
+                        OsmCircle(
+                            center = mapCenter,
+                            radiusMeters = radius.toDouble(),
+                            fillColor = Blue.copy(alpha = 0.12f),
+                            strokeColor = Blue.copy(alpha = 0.4f),
+                            strokeWidth = 3f
+                        )
+                    ),
+                    gesturesEnabled = true,
+                    onCenterChanged = { newCenter ->
+                        mapCenter = newCenter
+                    }
                 )
 
-                // Search results
+                // Center pin (aligned to map center)
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = "Pin",
+                    tint = Color.Red,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .align(Alignment.Center)
+                        .offset(y = (-24).dp) // anchor tip at center
+                )
+
+                // Search results overlay
                 if (showSearchResults && searchResults.isNotEmpty()) {
                     LazyColumn(
                         modifier = Modifier
@@ -148,6 +140,7 @@ fun AddLocationScreen(
                             .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surface)
+                            .align(Alignment.TopStart)
                     ) {
                         items(searchResults) { result ->
                             Column(
@@ -158,14 +151,7 @@ fun AddLocationScreen(
                                         searchText = result.title
                                         showSearchResults = false
                                         viewModel.clearSearchResults()
-                                        scope.launch {
-                                            cameraPositionState.animate(
-                                                CameraUpdateFactory.newLatLngZoom(
-                                                    LatLng(result.latitude, result.longitude),
-                                                    15f
-                                                )
-                                            )
-                                        }
+                                        mapCenter = GeoPoint(result.latitude, result.longitude)
                                     }
                                     .padding(horizontal = 14.dp, vertical = 10.dp)
                             ) {
@@ -182,20 +168,19 @@ fun AddLocationScreen(
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Bottom card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                ) {
+            // Bottom card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -213,7 +198,7 @@ fun AddLocationScreen(
 
                         // Coordinates
                         Text(
-                            text = String.format("%.5f, %.5f", selectedCoordinate.latitude, selectedCoordinate.longitude),
+                            text = String.format("%.5f, %.5f", mapCenter.latitude, mapCenter.longitude),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -256,7 +241,7 @@ fun AddLocationScreen(
                         Button(
                             onClick = {
                                 scope.launch {
-                                    val coord = selectedCoordinate
+                                    val coord = mapCenter
                                     val geocodedName = viewModel.reverseGeocode(coord.latitude, coord.longitude)
                                     val name = geocodedName ?: selectedName.ifBlank { "Alert" }
                                     val alert = GeofenceLocation(
@@ -277,7 +262,6 @@ fun AddLocationScreen(
                         }
                     }
                 }
-            }
         }
     }
 }

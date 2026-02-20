@@ -23,8 +23,6 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        manifestPlaceholders["MAPS_API_KEY"] =
-            localProperties.getProperty("MAPS_API_KEY", "")
     }
 
     buildTypes {
@@ -68,9 +66,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Google Maps
-    implementation("com.google.maps.android:maps-compose:4.3.3")
-    implementation("com.google.android.gms:play-services-maps:19.0.0")
+    // OpenStreetMap
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 
     // Location & Geofencing
     implementation("com.google.android.gms:play-services-location:21.2.0")
