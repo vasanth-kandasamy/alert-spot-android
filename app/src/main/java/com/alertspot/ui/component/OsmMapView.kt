@@ -1,6 +1,9 @@
 package com.alertspot.ui.component
 
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Color as AndroidColor
+import android.graphics.Point
 import android.view.MotionEvent
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -13,19 +16,58 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polygon
+
+/**
+ * Custom overlay that draws a blue dot with white border and a translucent pulse
+ * ring to indicate the user's current location.
+ */
+private class BlueDotOverlay(private var location: GeoPoint? = null) : Overlay() {
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.rgb(0, 122, 255)
+        style = Paint.Style.FILL
+    }
+    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 4f
+    }
+    private val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = AndroidColor.argb(40, 0, 122, 255)
+        style = Paint.Style.FILL
+    }
+
+    fun updateLocation(geoPoint: GeoPoint?) {
+        location = geoPoint
+    }
+
+    override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
+        if (shadow) return
+        val loc = location ?: return
+        val point = Point()
+        mapView.projection.toPixels(loc, point)
+        // Pulse ring
+        canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), 40f, pulsePaint)
+        // White border
+        canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), 12f, borderPaint)
+        // Blue fill
+        canvas.drawCircle(point.x.toFloat(), point.y.toFloat(), 10f, fillPaint)
+    }
+}
 
 /**
  * A reusable Compose wrapper around osmdroid's MapView.
  *
  * @param modifier         Compose modifier
- * @param center           Initial center of the map
- * @param zoom             Initial zoom level (0–20)
+ * @param center           Center of the map
+ * @param zoom             Zoom level (0–20)
  * @param markers          List of markers to display
  * @param circles          List of radius circles to display
  * @param gesturesEnabled  Whether the user can scroll/zoom the map
  * @param onCenterChanged  Callback fired when the map center changes (after user drag)
- * @param myLocationEnabled Whether to show the blue GPS dot
+ * @param userLocation     If set, draws a blue dot at this position
+ * @param animateKey        Change this value to force the map to re-animate to [center]
  */
 @Composable
 fun OsmMapView(
@@ -36,30 +78,43 @@ fun OsmMapView(
     circles: List<OsmCircle> = emptyList(),
     gesturesEnabled: Boolean = true,
     onCenterChanged: ((GeoPoint) -> Unit)? = null,
-    myLocationEnabled: Boolean = false
+    userLocation: GeoPoint? = null,
+    animateKey: Int = 0
 ) {
     val context = LocalContext.current
 
-    // Ensure osmdroid config uses our user-agent
+    // Ensure osmdroid config uses our user-agent and increase tile cache
     LaunchedEffect(Unit) {
-        Configuration.getInstance().userAgentValue = context.packageName
+        val config = Configuration.getInstance()
+        config.userAgentValue = context.packageName
+        // Increase tile download threads for faster loading
+        config.tileDownloadThreads = 6
+        config.tileFileSystemThreads = 4
+        // Increase cache sizes
+        config.tileFileSystemCacheMaxBytes = 512L * 1024 * 1024 // 512 MB
+        config.tileFileSystemCacheTrimBytes = 384L * 1024 * 1024 // trim at 384 MB
+        config.cacheMapTileCount = 12
     }
 
     // Remember the MapView so it survives recomposition
     val mapViewRef = remember { mutableStateOf<MapView?>(null) }
+    val blueDotOverlay = remember { BlueDotOverlay() }
 
-    // Update center/zoom when params change
-    LaunchedEffect(center, zoom) {
-        mapViewRef.value?.controller?.apply {
-            setCenter(center)
-            setZoom(zoom)
-        }
+    // Animate to center when center or animateKey changes
+    LaunchedEffect(center, zoom, animateKey) {
+        mapViewRef.value?.controller?.animateTo(center, zoom, 300L)
+    }
+
+    // Update blue dot when userLocation changes
+    LaunchedEffect(userLocation) {
+        blueDotOverlay.updateLocation(userLocation)
+        mapViewRef.value?.invalidate()
     }
 
     // Update overlays when markers/circles change
     LaunchedEffect(markers, circles) {
         val mapView = mapViewRef.value ?: return@LaunchedEffect
-        // Remove old marker/circle overlays, keep base tile overlay
+        // Remove old marker/circle overlays, keep base tile overlay and blue dot
         mapView.overlays.removeAll { it is Marker || it is Polygon }
 
         // Add circles
@@ -93,8 +148,12 @@ fun OsmMapView(
             MapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
+                zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
                 controller.setCenter(center)
                 controller.setZoom(zoom)
+
+                // Add blue dot overlay
+                overlays.add(blueDotOverlay)
 
                 if (!gesturesEnabled) {
                     setOnTouchListener { _, _ -> true } // consume all touches
@@ -102,9 +161,6 @@ fun OsmMapView(
 
                 // Fire callback when user finishes dragging
                 if (onCenterChanged != null) {
-                    addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                        // Use a scroll listener via overriding touch events
-                    }
                     setOnTouchListener { v, event ->
                         if (!gesturesEnabled) return@setOnTouchListener true
                         if (event.action == MotionEvent.ACTION_UP ||
@@ -120,10 +176,7 @@ fun OsmMapView(
                 mapViewRef.value = this
             }
         },
-        update = { mapView ->
-            mapView.controller.setCenter(center)
-            mapView.controller.setZoom(zoom)
-        }
+        update = { /* center/zoom handled by LaunchedEffect */ }
     )
 }
 

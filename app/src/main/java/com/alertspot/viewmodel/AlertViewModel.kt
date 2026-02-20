@@ -64,6 +64,7 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
     private var geofenceCheckJob: Job? = null
     private var searchJob: Job? = null
     private var locationCallback: LocationCallback? = null
+    private var isMonitoring = false
 
     private val geofencePendingIntent: PendingIntent by lazy {
         val intent = Intent(getApplication(), GeofenceBroadcastReceiver::class.java)
@@ -102,17 +103,52 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
     // MARK: - Monitoring
 
     fun startMonitoring() {
-        if (!hasLocationPermission()) return
+        if (!hasLocationPermission()) {
+            Log.d(TAG, "⚠️ Location permission not granted — monitoring deferred")
+            return
+        }
 
-        val request = LocationRequest.Builder(currentProximityTier.checkIntervalMs)
-            .setPriority(currentProximityTier.priority)
-            .setMinUpdateDistanceMeters(currentProximityTier.distanceFilterMeters)
+        if (isMonitoring) {
+            Log.d(TAG, "ℹ️ Already monitoring — refreshing geofences")
+            refreshMonitoredGeofences()
+            return
+        }
+
+        isMonitoring = true
+
+        Log.d(TAG, "▶️ Starting location monitoring (tier: $currentProximityTier)")
+
+        // Seed location immediately from last known position
+        try {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d(TAG, "📍 Last known location: ${location.latitude}, ${location.longitude}")
+                    _currentLocation.value = location
+                    // Immediately check geofences with this location
+                    checkGeofenceBoundaries()
+                } else {
+                    Log.d(TAG, "⚠️ No last known location available")
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException getting last location", e)
+        }
+
+        // Request continuous location updates — start with high accuracy
+        // to get a fast initial fix, then adapt via proximity tiers
+        val request = LocationRequest.Builder(5_000L)
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+            .setMinUpdateDistanceMeters(0f) // get every update initially
+            .setMaxUpdateDelayMillis(10_000L)
             .build()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.lastLocation?.let { location ->
+                    Log.d(TAG, "📍 Location update: ${location.latitude}, ${location.longitude} (accuracy: ${location.accuracy}m)")
                     _currentLocation.value = location
+                    // Check geofences on every location update
+                    checkGeofenceBoundaries()
                 }
             }
         }
@@ -127,11 +163,10 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
         refreshMonitoredGeofences()
         startGeofenceCheckLoop()
-
-        Log.d(TAG, "Location monitoring started")
     }
 
     fun stopMonitoring() {
+        isMonitoring = false
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
         geofenceCheckJob?.cancel()
@@ -150,7 +185,11 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun checkGeofenceBoundaries() {
-        val userLocation = _currentLocation.value ?: return
+        val userLocation = _currentLocation.value
+        if (userLocation == null) {
+            Log.d(TAG, "⚠️ checkGeofenceBoundaries: no current location yet")
+            return
+        }
         var nearestDistance = Double.MAX_VALUE
 
         for (location in _locations.value) {
@@ -164,6 +203,8 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
             )
             val distance = results[0].toDouble()
 
+            Log.d(TAG, "📏 ${location.name}: distance=${distance.toInt()}m, radius=${location.radius.toInt()}m, triggered=${location.id in triggeredAlerts}")
+
             val distanceToEdge = distance - location.radius
             if (distanceToEdge < nearestDistance) {
                 nearestDistance = distanceToEdge
@@ -171,7 +212,7 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
             // User entered geofence
             if (distance <= location.radius && location.id !in triggeredAlerts) {
-                Log.d(TAG, "📍 Detected user entered ${location.name} (distance: ${distance.toInt()}m, radius: ${location.radius.toInt()}m)")
+                Log.d(TAG, "🔔 Entered geofence: ${location.name} (distance: ${distance.toInt()}m, radius: ${location.radius.toInt()}m)")
                 triggeredAlerts.add(location.id)
                 triggerAlarm(location)
             }
@@ -223,7 +264,10 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
         removeAllGeofences()
 
         val enabledLocations = _locations.value.filter { it.isEnabled }
-        if (enabledLocations.isEmpty()) return
+        if (enabledLocations.isEmpty()) {
+            Log.d(TAG, "No enabled locations — skipping geofence registration")
+            return
+        }
 
         val geofences = enabledLocations.map { location ->
             Geofence.Builder()
@@ -231,18 +275,19 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
                 .setCircularRegion(location.latitude, location.longitude, location.radius.toFloat())
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
+                .setLoiteringDelay(0)
                 .build()
         }
 
         val request = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER or GeofencingRequest.INITIAL_TRIGGER_DWELL)
             .addGeofences(geofences)
             .build()
 
         try {
             geofencingClient.addGeofences(request, geofencePendingIntent)
-                .addOnSuccessListener { Log.d(TAG, "Registered ${geofences.size} geofences") }
-                .addOnFailureListener { Log.e(TAG, "Failed to register geofences", it) }
+                .addOnSuccessListener { Log.d(TAG, "✅ Registered ${geofences.size} geofences") }
+                .addOnFailureListener { e -> Log.e(TAG, "❌ Failed to register geofences: ${e.message}", e) }
         } catch (e: SecurityException) {
             Log.e(TAG, "Location permission missing for geofencing", e)
         }

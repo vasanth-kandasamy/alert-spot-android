@@ -5,10 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -48,6 +50,11 @@ fun AddLocationScreen(
 
     // Track map center as selected coordinate
     var mapCenter by remember { mutableStateOf(defaultPosition) }
+    var centerTrigger by remember { mutableIntStateOf(0) }
+
+    val userGeoPoint = remember(currentLocation) {
+        currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
+    }
 
     val scope = rememberCoroutineScope()
 
@@ -117,7 +124,9 @@ fun AddLocationScreen(
                     gesturesEnabled = true,
                     onCenterChanged = { newCenter ->
                         mapCenter = newCenter
-                    }
+                    },
+                    userLocation = userGeoPoint,
+                    animateKey = centerTrigger
                 )
 
                 // Center pin (aligned to map center)
@@ -130,6 +139,24 @@ fun AddLocationScreen(
                         .align(Alignment.Center)
                         .offset(y = (-24).dp) // anchor tip at center
                 )
+
+                // My Location button
+                SmallFloatingActionButton(
+                    onClick = {
+                        currentLocation?.let {
+                            mapCenter = GeoPoint(it.latitude, it.longitude)
+                            centerTrigger++
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = Blue,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                ) {
+                    Icon(Icons.Default.MyLocation, contentDescription = "My Location")
+                }
 
                 // Search results overlay
                 if (showSearchResults && searchResults.isNotEmpty()) {

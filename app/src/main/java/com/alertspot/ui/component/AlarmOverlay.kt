@@ -66,7 +66,7 @@ fun AlarmOverlay(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = if (locationName != null) {
+                text = if (!locationName.isNullOrBlank()) {
                     "You have arrived at $locationName"
                 } else {
                     "You have arrived at your destination"

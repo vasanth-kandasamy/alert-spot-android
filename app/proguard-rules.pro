@@ -3,5 +3,9 @@
 # Keep Gson serialized models
 -keep class com.alertspot.model.** { *; }
 
-# Google Maps
--keep class com.google.android.gms.maps.** { *; }
+# osmdroid
+-keep class org.osmdroid.** { *; }
+-dontwarn org.osmdroid.**
+
+# Google Play Services Location
+-keep class com.google.android.gms.location.** { *; }

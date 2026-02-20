@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -61,6 +62,14 @@ fun MapScreen(
         }
     }
 
+    // Current user location as GeoPoint for blue dot
+    val userGeoPoint = remember(currentLocation) {
+        currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
+    }
+
+    // Increment this to force map re-center (even to same coords)
+    var centerTrigger by remember { mutableIntStateOf(0) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMapView(
             modifier = Modifier.fillMaxSize(),
@@ -68,19 +77,42 @@ fun MapScreen(
             zoom = 14.0,
             markers = markers,
             circles = circles,
-            gesturesEnabled = true
+            gesturesEnabled = true,
+            userLocation = userGeoPoint,
+            animateKey = centerTrigger
         )
 
-        FloatingActionButton(
-            onClick = onAddAlert,
-            containerColor = Blue,
-            contentColor = Color.White,
-            shape = CircleShape,
+        // Button column (bottom-end)
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Alert")
+            // My Location button
+            SmallFloatingActionButton(
+                onClick = {
+                    currentLocation?.let {
+                        mapCenter = GeoPoint(it.latitude, it.longitude)
+                        centerTrigger++
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = Blue,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "My Location")
+            }
+
+            // Add Alert button
+            FloatingActionButton(
+                onClick = onAddAlert,
+                containerColor = Blue,
+                contentColor = Color.White,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Alert")
+            }
         }
     }
 }
