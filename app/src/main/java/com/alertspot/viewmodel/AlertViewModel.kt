@@ -301,6 +301,18 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun triggerAlarm(location: GeofenceLocation) {
         recordHistory(location)
+
+        // Auto-disable the alert so it fires only once
+        val disabled = location.copy(isEnabled = false)
+        val list = _locations.value.toMutableList()
+        val idx = list.indexOfFirst { it.id == location.id }
+        if (idx != -1) {
+            list[idx] = disabled
+            _locations.value = list
+            preferencesManager.saveLocations(list)
+            refreshMonitoredGeofences()
+        }
+
         app.alarmLocationName.value = location.name
         app.alarmHandler.sendNotification(location.name, location.notificationMessage)
         app.alarmHandler.playAlarm()

@@ -34,6 +34,12 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
             Log.d(TAG, "📍 Entered geofence: ${location.name}")
 
+            // Auto-disable this alert so it doesn't trigger again
+            val updatedLocations = locations.map {
+                if (it.id == location.id) it.copy(isEnabled = false) else it
+            }
+            preferencesManager.saveLocations(updatedLocations)
+
             // Record history
             val history = preferencesManager.loadHistory().toMutableList()
             history.add(

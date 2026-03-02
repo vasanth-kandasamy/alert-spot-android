@@ -27,8 +27,10 @@ class LocationForegroundService : Service() {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("AlertSpot")
             .setContentText("Monitoring your locations")
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
+            .setSilent(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
             .build()
 
         ServiceCompat.startForeground(

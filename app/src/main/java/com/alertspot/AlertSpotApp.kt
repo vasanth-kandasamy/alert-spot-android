@@ -35,13 +35,14 @@ class AlertSpotApp : Application() {
         }
         notificationManager.createNotificationChannel(alarmChannel)
 
-        // Service channel — low importance for foreground service
+        // Service channel — minimal importance so it stays hidden
         val serviceChannel = NotificationChannel(
             CHANNEL_SERVICE,
             getString(R.string.channel_service),
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_MIN
         ).apply {
             description = getString(R.string.channel_service_desc)
+            setShowBadge(false)
         }
         notificationManager.createNotificationChannel(serviceChannel)
     }
