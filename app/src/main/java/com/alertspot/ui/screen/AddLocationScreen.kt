@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alertspot.model.GeofenceLocation
-import com.alertspot.ui.component.OsmCircle
 import com.alertspot.ui.component.OsmMapView
 import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
@@ -112,15 +111,9 @@ fun AddLocationScreen(
                     modifier = Modifier.fillMaxSize(),
                     center = mapCenter,
                     zoom = 14.0,
-                    circles = listOf(
-                        OsmCircle(
-                            center = mapCenter,
-                            radiusMeters = radius.toDouble(),
-                            fillColor = Blue.copy(alpha = 0.12f),
-                            strokeColor = Blue.copy(alpha = 0.4f),
-                            strokeWidth = 3f
-                        )
-                    ),
+                    centerRadiusMeters = radius.toDouble(),
+                    centerRadiusFillColor = Blue.copy(alpha = 0.12f),
+                    centerRadiusStrokeColor = Blue.copy(alpha = 0.4f),
                     gesturesEnabled = true,
                     onCenterChanged = { newCenter ->
                         mapCenter = newCenter

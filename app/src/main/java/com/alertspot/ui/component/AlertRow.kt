@@ -2,6 +2,7 @@ package com.alertspot.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -58,7 +59,6 @@ fun AlertRow(
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
-            // Use targetValue instead of dismissDirection (safe – never throws)
             val target = dismissState.targetValue
             val current = dismissState.currentValue
             val direction = if (target != SwipeToDismissBoxValue.Settled) target else current
@@ -69,13 +69,24 @@ fun AlertRow(
                     SwipeToDismissBoxValue.StartToEnd -> Blue
                     else -> Color.Transparent
                 },
+                animationSpec = spring(stiffness = 400f),
                 label = "swipeBg"
             )
 
+            val iconScale by animateFloatAsState(
+                if (target != SwipeToDismissBoxValue.Settled) 1f else 0.6f,
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
+                label = "iconScale"
+            )
+
+            val alignment = when (direction) {
+                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                else -> Alignment.CenterStart
+            }
+
             val icon = when (direction) {
                 SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
-                SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Edit
-                else -> Icons.Default.Delete
+                else -> Icons.Default.Edit
             }
 
             val label = when (direction) {
@@ -84,42 +95,36 @@ fun AlertRow(
                 else -> ""
             }
 
-            val alignment = when (direction) {
-                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                else -> Alignment.CenterStart
-            }
-
-            val iconScale by animateFloatAsState(
-                if (target == SwipeToDismissBoxValue.Settled) 0.75f else 1f,
-                label = "iconScale"
-            )
-
+            // Full-width rounded background that peeks from behind the card
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(bgColor)
-                    .padding(horizontal = 24.dp),
+                    .background(bgColor),
                 contentAlignment = alignment
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.scale(iconScale)
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = label,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        label,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .padding(horizontal = 20.dp)
+                            .scale(iconScale)
+                    ) {
+                        Icon(
+                            icon,
+                            contentDescription = label,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            label,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         },

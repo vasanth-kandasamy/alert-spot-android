@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.alertspot.ui.component.OsmCircle
 import com.alertspot.ui.component.OsmMapView
 import com.alertspot.ui.component.OsmMarker
 import com.alertspot.ui.theme.Blue
@@ -41,23 +40,13 @@ fun MapScreen(
     }
 
     val markers = remember(locations) {
-        locations.filter { it.isEnabled }.map { location ->
+        locations.map { location ->
             OsmMarker(
                 position = GeoPoint(location.latitude, location.longitude),
                 title = location.name,
-                snippet = viewModel.formattedDistance(location) ?: ""
-            )
-        }
-    }
-
-    val circles = remember(locations) {
-        locations.filter { it.isEnabled }.map { location ->
-            OsmCircle(
-                center = GeoPoint(location.latitude, location.longitude),
-                radiusMeters = location.radius,
-                fillColor = Blue.copy(alpha = 0.10f),
-                strokeColor = Blue.copy(alpha = 0.35f),
-                strokeWidth = 3f
+                snippet = viewModel.formattedDistance(location) ?: "",
+                tintColor = if (location.isEnabled) android.graphics.Color.rgb(52, 199, 89) // Green
+                            else android.graphics.Color.rgb(142, 142, 147) // Grey
             )
         }
     }
@@ -76,7 +65,6 @@ fun MapScreen(
             center = mapCenter,
             zoom = 14.0,
             markers = markers,
-            circles = circles,
             gesturesEnabled = true,
             userLocation = userGeoPoint,
             animateKey = centerTrigger
