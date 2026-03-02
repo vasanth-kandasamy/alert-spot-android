@@ -51,6 +51,15 @@
             android:name=".service.GeofenceBroadcastReceiver"
             android:exported="false" />
 
+        <!-- Alarm stop action receiver (lock screen / notification shade) -->
+        <receiver
+            android:name=".service.AlarmActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.alertspot.ACTION_STOP_ALARM" />
+            </intent-filter>
+        </receiver>
+
         <!-- Location foreground service -->
         <service
             android:name=".service.LocationForegroundService"

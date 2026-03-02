@@ -1,10 +1,12 @@
 package com.alertspot
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        allowShowOnLockScreen()
         requestPermissions()
 
         setContent {
@@ -115,5 +118,22 @@ class MainActivity : ComponentActivity() {
     private fun startLocationService() {
         val intent = Intent(this, LocationForegroundService::class.java)
         startForegroundService(intent)
+    }
+
+    /** Let this Activity display over the lock screen when an alarm fires. */
+    @Suppress("DEPRECATION")
+    private fun allowShowOnLockScreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            val km = getSystemService(KeyguardManager::class.java)
+            km?.requestDismissKeyguard(this, null)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
     }
 }

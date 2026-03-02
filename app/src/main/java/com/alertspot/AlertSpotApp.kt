@@ -22,15 +22,16 @@ class AlertSpotApp : Application() {
     private fun createNotificationChannels() {
         val notificationManager = getSystemService(NotificationManager::class.java)
 
-        // Alarm channel — high importance for loud alerts
+        // Alarm channel — max importance for lock screen / heads-up alerts
         val alarmChannel = NotificationChannel(
             CHANNEL_ALARM,
             getString(R.string.channel_alarm),
-            NotificationManager.IMPORTANCE_HIGH
+            NotificationManager.IMPORTANCE_MAX
         ).apply {
             description = getString(R.string.channel_alarm_desc)
             enableVibration(true)
             setBypassDnd(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
         notificationManager.createNotificationChannel(alarmChannel)
 

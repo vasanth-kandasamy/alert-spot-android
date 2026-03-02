@@ -8,6 +8,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -16,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.alertspot.AlertSpotApp
 import com.alertspot.MainActivity
 import com.alertspot.R
+import com.alertspot.service.AlarmActionReceiver
 
 class AlarmHandler(private val context: Context) {
 
@@ -99,12 +101,22 @@ class AlarmHandler(private val context: Context) {
     }
 
     fun sendNotification(locationName: String, message: String?) {
-        val intent = Intent(context, MainActivity::class.java).apply {
+        // Full-screen intent to launch the app over lock screen
+        val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("from_alarm", true)
         }
-        val pendingIntent = PendingIntent.getActivity(
-            context, 0, intent,
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            context, 0, fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // "Stop Alarm" action — a broadcast intent handled without opening the app
+        val stopIntent = Intent(context, AlarmActionReceiver::class.java).apply {
+            action = AlarmActionReceiver.ACTION_STOP_ALARM
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            context, 100, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -114,15 +126,41 @@ class AlarmHandler(private val context: Context) {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Location Alert!")
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(false)
+            .setOngoing(true) // keep it visible until stopped
+            .setContentIntent(fullScreenPendingIntent)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .addAction(
+                R.drawable.ic_notification,
+                "Stop Alarm",
+                stopPendingIntent
+            )
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
+
+        // Wake the screen so the user sees the alarm on lock screen
+        wakeScreen()
+    }
+
+    private fun wakeScreen() {
+        try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = pm.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                "alertspot:alarm_wake"
+            )
+            wakeLock.acquire(10_000L) // 10 seconds is enough to light the screen
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to wake screen", e)
+        }
     }
 }
