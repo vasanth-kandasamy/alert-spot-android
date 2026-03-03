@@ -31,11 +31,14 @@ fun MapScreen(
     } ?: defaultPosition
 
     var mapCenter by remember { mutableStateOf(startPosition) }
+    // Increment this to force map re-center (even to same coords)
+    var centerTrigger by remember { mutableIntStateOf(0) }
     var hasCenteredOnUser by remember { mutableStateOf(false) }
     LaunchedEffect(currentLocation) {
         if (!hasCenteredOnUser && currentLocation != null) {
             hasCenteredOnUser = true
             mapCenter = GeoPoint(currentLocation!!.latitude, currentLocation!!.longitude)
+            centerTrigger++
         }
     }
 
@@ -55,9 +58,6 @@ fun MapScreen(
     val userGeoPoint = remember(currentLocation) {
         currentLocation?.let { GeoPoint(it.latitude, it.longitude) }
     }
-
-    // Increment this to force map re-center (even to same coords)
-    var centerTrigger by remember { mutableIntStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         OsmMapView(

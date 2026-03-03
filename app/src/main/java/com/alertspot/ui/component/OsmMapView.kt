@@ -24,6 +24,7 @@ import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -278,18 +279,7 @@ fun OsmMapView(
 ) {
     val context = LocalContext.current
 
-    // Ensure osmdroid config uses our user-agent and increase tile cache
-    LaunchedEffect(Unit) {
-        val config = Configuration.getInstance()
-        config.userAgentValue = context.packageName
-        // Increase tile download threads for faster loading
-        config.tileDownloadThreads = 6
-        config.tileFileSystemThreads = 4
-        // Increase cache sizes
-        config.tileFileSystemCacheMaxBytes = 512L * 1024 * 1024 // 512 MB
-        config.tileFileSystemCacheTrimBytes = 384L * 1024 * 1024 // trim at 384 MB
-        config.cacheMapTileCount = 12
-    }
+    // osmdroid is pre-configured in AlertSpotApp.onCreate() — no per-view setup needed
 
     // Remember the MapView so it survives recomposition
     val mapViewRef = remember { mutableStateOf<MapView?>(null) }
@@ -366,8 +356,31 @@ fun OsmMapView(
         modifier = modifier,
         factory = { ctx ->
             MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
+                // ── Performance: hardware-accelerate & reduce tile fetches ──
+                setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+
+                // Use OSM MAPNIK tiles with explicit multi-subdomain setup
+                // for parallel downloads (a/b/c subdomains).
+                // MAPNIK has the most complete POI & label coverage.
+                val fastMapnik = XYTileSource(
+                    "Mapnik-Fast",
+                    0, 19, 256, ".png",
+                    arrayOf(
+                        "https://a.tile.openstreetmap.org/",
+                        "https://b.tile.openstreetmap.org/",
+                        "https://c.tile.openstreetmap.org/"
+                    ),
+                    "\u00a9 OpenStreetMap contributors"
+                )
+                setTileSource(fastMapnik)
+
                 setMultiTouchControls(true)
+                isTilesScaledToDpi = true          // fewer tiles per screen
+                isHorizontalMapRepetitionEnabled = false
+                isVerticalMapRepetitionEnabled = false
+                overlayManager.tilesOverlay.loadingBackgroundColor = AndroidColor.rgb(242, 239, 233)
+                overlayManager.tilesOverlay.loadingLineColor = AndroidColor.rgb(220, 218, 212)
+
                 zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
                 controller.setCenter(center)
                 controller.setZoom(zoom)

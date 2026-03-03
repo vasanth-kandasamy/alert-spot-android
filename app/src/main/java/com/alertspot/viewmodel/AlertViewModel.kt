@@ -471,24 +471,31 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // MARK: - Location Search (Photon — powered by OpenStreetMap)
+    // MARK: - Location Search (Photon autocomplete + Nominatim fallback)
 
     fun search(query: String) {
         searchJob?.cancel()
-        if (query.isBlank()) {
+        if (query.length < 2) {
             _searchResults.value = emptyList()
             return
         }
         searchJob = viewModelScope.launch {
-            delay(300)  // debounce
+            delay(150)  // short debounce for fast type-ahead feel
+
+            val photonResults = mutableListOf<SearchResult>()
+            val seen = mutableSetOf<String>()
+
+            // ── Phase 1: Photon (instant autocomplete) — show results ASAP ──
             withContext(Dispatchers.IO) {
                 try {
                     val encoded = URLEncoder.encode(query, "UTF-8")
-                    val url = "https://photon.komoot.io/api/?q=$encoded&limit=10"
-                    val json = URL(url).readText()
-                    val root = JSONObject(json)
+                    val loc = _currentLocation.value
+                    val latParam = loc?.latitude ?: 12.97
+                    val lonParam = loc?.longitude ?: 77.59
+                    val photonUrl = "https://photon.komoot.io/api/?q=$encoded&limit=8&lat=$latParam&lon=$lonParam&lang=en"
+                    val photonJson = URL(photonUrl).readText()
+                    val root = JSONObject(photonJson)
                     val features = root.getJSONArray("features")
-                    val results = mutableListOf<SearchResult>()
                     for (i in 0 until features.length()) {
                         val feature = features.getJSONObject(i)
                         val geometry = feature.getJSONObject("geometry")
@@ -506,14 +513,79 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
                         val subtitle = listOf(city, state, country)
                             .filter { it.isNotBlank() && it != title }
                             .joinToString(", ")
-                        if (title.isNotBlank()) {
-                            results.add(SearchResult(title, subtitle, lat, lng))
+                        if (title.isNotBlank() && seen.add(title.lowercase())) {
+                            photonResults.add(SearchResult(title, subtitle, lat, lng))
                         }
                     }
-                    _searchResults.value = results
                 } catch (e: Exception) {
                     Log.e(TAG, "Photon search failed", e)
-                    _searchResults.value = emptyList()
+                }
+            }
+
+            // Show Photon results immediately (don't wait for Nominatim)
+            if (photonResults.isNotEmpty()) {
+                _searchResults.value = photonResults.take(10)
+            }
+
+            // ── Phase 2: Nominatim (better India POI coverage) — merge in ──
+            withContext(Dispatchers.IO) {
+                try {
+                    val encoded = URLEncoder.encode(query, "UTF-8")
+                    val loc = _currentLocation.value
+                    val nominatimUrl = buildString {
+                        append("https://nominatim.openstreetmap.org/search?q=$encoded")
+                        append("&format=json&addressdetails=1&limit=6")
+                        append("&countrycodes=in")
+                        if (loc != null) {
+                            val lat = loc.latitude
+                            val lon = loc.longitude
+                            append("&viewbox=${lon - 2},${lat + 2},${lon + 2},${lat - 2}")
+                            append("&bounded=0")
+                        }
+                        append("&accept-language=en")
+                    }
+                    val conn = URL(nominatimUrl).openConnection() as java.net.HttpURLConnection
+                    conn.setRequestProperty("User-Agent", getApplication<Application>().packageName)
+                    conn.connectTimeout = 5000
+                    conn.readTimeout = 5000
+                    val json = conn.inputStream.bufferedReader().readText()
+                    conn.disconnect()
+
+                    val arr = org.json.JSONArray(json)
+                    val merged = photonResults.toMutableList()
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val lat = obj.getDouble("lat")
+                        val lng = obj.getDouble("lon")
+                        val displayName = obj.getString("display_name")
+                        val addr = obj.optJSONObject("address")
+                        val name = obj.optString("name", "").ifBlank {
+                            addr?.let {
+                                it.optString("amenity", "")
+                                    .ifBlank { it.optString("road", "") }
+                                    .ifBlank { it.optString("village", "") }
+                                    .ifBlank { it.optString("town", "") }
+                                    .ifBlank { it.optString("city", "") }
+                            } ?: ""
+                        }
+                        val city = addr?.optString("city", "")
+                            ?: addr?.optString("town", "")
+                            ?: addr?.optString("village", "")
+                            ?: ""
+                        val state = addr?.optString("state", "") ?: ""
+                        val title = name.ifBlank {
+                            displayName.split(",").firstOrNull()?.trim() ?: displayName
+                        }
+                        val subtitle = listOf(city, state)
+                            .filter { it.isNotBlank() && it != title }
+                            .joinToString(", ")
+                        if (title.isNotBlank() && seen.add(title.lowercase())) {
+                            merged.add(SearchResult(title, subtitle, lat, lng))
+                        }
+                    }
+                    _searchResults.value = merged.take(12)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Nominatim search failed", e)
                 }
             }
         }

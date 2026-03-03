@@ -41,7 +41,7 @@ fun AddLocationScreen(
     var searchText by remember { mutableStateOf("") }
     var selectedName by remember { mutableStateOf("") }
     var showSearchResults by remember { mutableStateOf(false) }
-    var radius by remember { mutableFloatStateOf(2000f) }
+    var radius by remember { mutableFloatStateOf(1000f) }
 
     val defaultPosition = currentLocation?.let {
         GeoPoint(it.latitude, it.longitude)
@@ -49,6 +49,7 @@ fun AddLocationScreen(
 
     // Track map center as selected coordinate
     var mapCenter by remember { mutableStateOf(defaultPosition) }
+    var mapZoom by remember { mutableDoubleStateOf(14.0) }
     var centerTrigger by remember { mutableIntStateOf(0) }
 
     val userGeoPoint = remember(currentLocation) {
@@ -65,7 +66,11 @@ fun AddLocationScreen(
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Cancel")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                ),
+                windowInsets = WindowInsets(0)
             )
         }
     ) { padding ->
@@ -74,7 +79,7 @@ fun AddLocationScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Search bar
+            // Search bar (compact padding)
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { value ->
@@ -100,7 +105,7 @@ fun AddLocationScreen(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(12.dp)
             )
 
@@ -110,7 +115,7 @@ fun AddLocationScreen(
                 OsmMapView(
                     modifier = Modifier.fillMaxSize(),
                     center = mapCenter,
-                    zoom = 14.0,
+                    zoom = mapZoom,
                     centerRadiusMeters = radius.toDouble(),
                     centerRadiusFillColor = Blue.copy(alpha = 0.12f),
                     centerRadiusStrokeColor = Blue.copy(alpha = 0.4f),
@@ -172,6 +177,8 @@ fun AddLocationScreen(
                                         showSearchResults = false
                                         viewModel.clearSearchResults()
                                         mapCenter = GeoPoint(result.latitude, result.longitude)
+                                        mapZoom = 12.5  // zoomed out to show nearby places
+                                        centerTrigger++
                                     }
                                     .padding(horizontal = 14.dp, vertical = 10.dp)
                             ) {
@@ -194,28 +201,17 @@ fun AddLocationScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(20.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Drag indicator
-                        Box(
-                            modifier = Modifier
-                                .width(36.dp)
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(2.5.dp))
-                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
                         // Coordinates
                         Text(
                             text = String.format("%.5f, %.5f", mapCenter.latitude, mapCenter.longitude),
@@ -223,7 +219,7 @@ fun AddLocationScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // Radius slider
                         Row(
@@ -255,7 +251,7 @@ fun AddLocationScreen(
                             Text("10 km", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // Save button
                         Button(
