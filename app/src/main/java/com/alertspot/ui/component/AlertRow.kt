@@ -1,9 +1,11 @@
 package com.alertspot.ui.component
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,15 +23,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.alertspot.model.GeofenceLocation
 import com.alertspot.ui.theme.Blue
 import com.alertspot.ui.theme.Green
 import com.alertspot.ui.theme.Red
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlertRow(
     location: GeofenceLocation,
@@ -40,111 +47,190 @@ fun AlertRow(
     onDelete: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    showDeleteConfirm = true
-                    false // Don't dismiss; let the dialog decide
-                }
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    onEdit()
-                    false // Reset after triggering
-                }
-                SwipeToDismissBoxValue.Settled -> true
-            }
-        }
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val offsetX = remember { Animatable(0f) }
+    val rowShape = RoundedCornerShape(26.dp)
+
+    // Half-open position = just enough to reveal the round button
+    val halfThresholdPx = with(density) { 78.dp.toPx() }
+    // Minimum drag distance to trigger snap-open (below this, snaps back)
+    val snapThresholdPx = with(density) { 30.dp.toPx() }
+
+    // Track whether the row is currently sitting at the half-open position
+    val currentOffset = offsetX.value
+    val isHalfOpenLeft = abs(currentOffset + halfThresholdPx) < 4f
+    val isHalfOpenRight = abs(currentOffset - halfThresholdPx) < 4f
+
+    // Button visibility
+    val showDeleteButton = currentOffset < -10f
+    val showEditButton = currentOffset > 10f
+
+    // Button scale (pop-in)
+    val deleteScale by animateFloatAsState(
+        targetValue = if (showDeleteButton) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 600f),
+        label = "deleteScale"
+    )
+    val editScale by animateFloatAsState(
+        targetValue = if (showEditButton) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 600f),
+        label = "editScale"
     )
 
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            val target = dismissState.targetValue
-            val current = dismissState.currentValue
-            val direction = if (target != SwipeToDismissBoxValue.Settled) target else current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 7.dp)
+    ) {
+        // Background: round action buttons
+        Box(modifier = Modifier.matchParentSize()) {
+            val actionSize = 52.dp
+            val actionSidePadding = 14.dp
 
-            val bgColor by animateColorAsState(
-                when (direction) {
-                    SwipeToDismissBoxValue.EndToStart -> Red
-                    SwipeToDismissBoxValue.StartToEnd -> Blue
-                    else -> Color.Transparent
-                },
-                animationSpec = spring(stiffness = 400f),
-                label = "swipeBg"
-            )
-
-            val iconScale by animateFloatAsState(
-                if (target != SwipeToDismissBoxValue.Settled) 1f else 0.6f,
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
-                label = "iconScale"
-            )
-
-            val alignment = when (direction) {
-                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                else -> Alignment.CenterStart
-            }
-
-            val icon = when (direction) {
-                SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
-                else -> Icons.Default.Edit
-            }
-
-            val label = when (direction) {
-                SwipeToDismissBoxValue.EndToStart -> "Delete"
-                SwipeToDismissBoxValue.StartToEnd -> "Edit"
-                else -> ""
-            }
-
-            // Full-width rounded background that peeks from behind the card
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bgColor),
-                contentAlignment = alignment
-            ) {
-                if (direction != SwipeToDismissBoxValue.Settled) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .padding(horizontal = 20.dp)
-                            .scale(iconScale)
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = label,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            label,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+            // Delete button (right side, revealed on left swipe)
+            if (deleteScale > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = actionSidePadding)
+                        .scale(deleteScale)
+                        .size(actionSize)
+                        .clip(CircleShape)
+                        .background(Red),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
-        },
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = true,
-        content = {
-            Card(
+
+            // Edit button (left side, revealed on right swipe)
+            if (editScale > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = actionSidePadding)
+                        .scale(editScale)
+                        .size(actionSize)
+                        .clip(CircleShape)
+                        .background(Blue),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+
+        // Tap overlay — only active when row is half-open
+        if (isHalfOpenLeft || isHalfOpenRight) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
+                    .matchParentSize()
+                    .pointerInput(isHalfOpenLeft, isHalfOpenRight) {
+                        detectTapGestures { offset ->
+                            if (isHalfOpenLeft) {
+                                val buttonRight = size.width.toFloat()
+                                val buttonLeft = buttonRight - with(density) { 80.dp.toPx() }
+                                if (offset.x >= buttonLeft) {
+                                    // Tapped the delete button
+                                    showDeleteConfirm = true
+                                } else {
+                                    // Tapped elsewhere → close
+                                }
+                                coroutineScope.launch {
+                                    offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                                }
+                            } else if (isHalfOpenRight) {
+                                val buttonRight = with(density) { 80.dp.toPx() }
+                                if (offset.x <= buttonRight) {
+                                    // Tapped the edit button
+                                    onEdit()
+                                }
+                                coroutineScope.launch {
+                                    offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                                }
+                            }
+                        }
+                    }
+            )
+        }
+
+        // Foreground card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(x = currentOffset.roundToInt(), y = 0) }
+                .pointerInput(Unit) {
+                    var startedHalfOpenLeft = false
+                    var startedHalfOpenRight = false
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            val pos = offsetX.value
+                            startedHalfOpenLeft = abs(pos + halfThresholdPx) < 8f
+                            startedHalfOpenRight = abs(pos - halfThresholdPx) < 8f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            coroutineScope.launch {
+                                offsetX.snapTo(offsetX.value + dragAmount)
+                            }
+                        },
+                        onDragEnd = {
+                            val current = offsetX.value
+                            coroutineScope.launch {
+                                when {
+                                    // Was half-open left and user swiped further left → trigger delete
+                                    startedHalfOpenLeft && current < -(halfThresholdPx + snapThresholdPx) -> {
+                                        showDeleteConfirm = true
+                                        offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                                    }
+                                    // Was half-open right and user swiped further right → trigger edit
+                                    startedHalfOpenRight && current > (halfThresholdPx + snapThresholdPx) -> {
+                                        onEdit()
+                                        offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                                    }
+                                    // First swipe left past threshold → snap to half-open
+                                    current < -snapThresholdPx -> {
+                                        offsetX.animateTo(-halfThresholdPx, spring(dampingRatio = 1f, stiffness = 600f))
+                                    }
+                                    // First swipe right past threshold → snap to half-open
+                                    current > snapThresholdPx -> {
+                                        offsetX.animateTo(halfThresholdPx, spring(dampingRatio = 1f, stiffness = 600f))
+                                    }
+                                    // Didn't swipe enough → snap back
+                                    else -> {
+                                        offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                                    }
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f))
+                            }
+                        }
+                    )
+                },
+            shape = rowShape,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 18.dp, vertical = 17.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Circular icon indicator
@@ -237,9 +323,8 @@ fun AlertRow(
                 }
             }
         }
-    )
 
-    // Delete confirmation dialog
+        // Delete confirmation dialog
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
