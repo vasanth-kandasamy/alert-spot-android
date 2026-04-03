@@ -1,13 +1,16 @@
 package com.alertspot.ui.navigation
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Map
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,8 +29,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -34,6 +41,9 @@ import androidx.navigation.navArgument
 import com.alertspot.ui.screen.*
 import com.alertspot.ui.theme.Blue
 import com.alertspot.viewmodel.AlertViewModel
+import kotlinx.coroutines.launch
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 sealed class Screen(val route: String) {
     data object Map : Screen("map")
@@ -59,21 +69,41 @@ fun AppNavigation(viewModel: AlertViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val bottomNavItems = listOf(
-        BottomNavItem(Screen.Map, "Map", Icons.Filled.Map, Icons.Outlined.Map),
-        BottomNavItem(Screen.AlertList, "Alerts", Icons.Filled.Notifications, Icons.Outlined.Notifications),
-        BottomNavItem(Screen.Settings, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
-    )
+    val bottomNavItems = remember {
+        listOf(
+            BottomNavItem(Screen.Map, "Map", Icons.Filled.Map, Icons.Outlined.Map),
+            BottomNavItem(Screen.AlertList, "Alerts", Icons.Filled.Notifications, Icons.Outlined.Notifications),
+            BottomNavItem(Screen.Settings, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+        )
+    }
+    val bottomRoutes = remember(bottomNavItems) { bottomNavItems.map { it.screen.route }.toSet() }
+    var selectedBottomRoute by rememberSaveable { mutableStateOf(Screen.Map.route) }
+    var pendingBottomRoute by rememberSaveable { mutableStateOf<String?>(null) }
 
-    val showBottomBar = currentRoute in bottomNavItems.map { it.screen.route }
+    LaunchedEffect(currentRoute) {
+        val route = currentRoute ?: return@LaunchedEffect
+        if (route !in bottomRoutes) return@LaunchedEffect
+
+        val pendingRoute = pendingBottomRoute
+        if (pendingRoute == null) {
+            selectedBottomRoute = route
+        } else if (route == pendingRoute) {
+            selectedBottomRoute = route
+            pendingBottomRoute = null
+        }
+    }
+
+    val showBottomBar = currentRoute in bottomRoutes
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
                 IosBottomBar(
                     items = bottomNavItems,
-                    currentRoute = currentRoute,
+                    selectedRoute = selectedBottomRoute,
                     onItemClick = { item ->
+                        selectedBottomRoute = item.screen.route
+                        pendingBottomRoute = item.screen.route
                         navController.navigate(item.screen.route) {
                             popUpTo(navController.graph.startDestinationId) {
                                 saveState = true
@@ -149,20 +179,24 @@ fun AppNavigation(viewModel: AlertViewModel) {
 @Composable
 private fun IosBottomBar(
     items: List<BottomNavItem>,
-    currentRoute: String?,
+    selectedRoute: String,
     onItemClick: (BottomNavItem) -> Unit
 ) {
-    val selectedIndex = items.indexOfFirst { it.screen.route == currentRoute }.coerceAtLeast(0)
+    val selectedIndex = items.indexOfFirst { it.screen.route == selectedRoute }.coerceAtLeast(0)
+    val darkTheme = isSystemInDarkTheme()
+    val density = LocalDensity.current
+    var settledIndex by remember { mutableIntStateOf(selectedIndex) }
 
-    // Frosted glass container
+    LaunchedEffect(selectedIndex) {
+        settledIndex = selectedIndex
+    }
+
     Column {
-        // Subtle top hair-line separator
         HorizontalDivider(
             thickness = 0.5.dp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
         )
 
-        // Top fade gradient — mimics iOS translucency edge
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -177,21 +211,201 @@ private fun IosBottomBar(
                 )
         )
 
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
                 .navigationBarsPadding()
-                .padding(top = 6.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEachIndexed { index, item ->
-                IosTabItem(
-                    item = item,
-                    isSelected = index == selectedIndex,
-                    onClick = { onItemClick(item) }
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .height(64.dp)
+                .clip(RoundedCornerShape(30.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (darkTheme) 0.96f else 0.98f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = if (darkTheme) 0.88f else 0.94f)
+                        )
+                    )
                 )
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (darkTheme) 0.08f else 0.05f),
+                    shape = RoundedCornerShape(30.dp)
+                )
+        ) {
+            val slotWidth = maxWidth / items.size
+            val bubbleInset = 6.dp
+            val bubbleWidth = slotWidth - (bubbleInset * 2)
+            val slotWidthPx = with(density) { slotWidth.toPx() }
+            val bubbleInsetPx = with(density) { bubbleInset.toPx() }
+            val bubbleWidthPx = with(density) { bubbleWidth.toPx() }
+            val selectedOffsetPx = (slotWidthPx * settledIndex) + bubbleInsetPx
+            val maxOffsetPx = (slotWidthPx * (items.lastIndex)) + bubbleInsetPx
+
+            var isDragging by remember { mutableStateOf(false) }
+            val bubbleOffset = remember { Animatable(selectedOffsetPx) }
+
+            // When settledIndex changes (tap or external nav), animate to target
+            LaunchedEffect(selectedOffsetPx) {
+                if (!isDragging) {
+                    bubbleOffset.animateTo(
+                        targetValue = selectedOffsetPx,
+                        animationSpec = spring(
+                            dampingRatio = 0.82f,
+                            stiffness = 420f
+                        )
+                    )
+                }
+            }
+
+            val bubbleOffsetPx = bubbleOffset.value
+            val previewIndex = if (slotWidthPx > 0f) {
+                ((bubbleOffsetPx - bubbleInsetPx) / slotWidthPx).roundToInt().coerceIn(0, items.lastIndex)
+            } else {
+                settledIndex
+            }
+
+            fun indexFromOffsetX(offsetX: Float): Int {
+                if (slotWidthPx <= 0f) return settledIndex
+                return floor(offsetX / slotWidthPx)
+                    .toInt()
+                    .coerceIn(0, items.lastIndex)
+            }
+
+            val coroutineScope = rememberCoroutineScope()
+
+            fun snapToNearestItem() {
+                val currentOffset = bubbleOffset.value
+                val targetIndex = if (slotWidthPx > 0f) {
+                    ((currentOffset - bubbleInsetPx) / slotWidthPx)
+                        .roundToInt()
+                        .coerceIn(0, items.lastIndex)
+                } else {
+                    settledIndex
+                }
+                isDragging = false
+                settledIndex = targetIndex
+                val targetOffset = (slotWidthPx * targetIndex) + bubbleInsetPx
+                coroutineScope.launch {
+                    bubbleOffset.animateTo(
+                        targetValue = targetOffset,
+                        animationSpec = spring(
+                            dampingRatio = 0.82f,
+                            stiffness = 420f
+                        )
+                    )
+                }
+                onItemClick(items[targetIndex])
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset { IntOffset(x = bubbleOffsetPx.roundToInt(), y = 0) }
+                        .width(bubbleWidth)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    if (darkTheme) {
+                                        Color.White.copy(alpha = 0.14f)
+                                    } else {
+                                        Color.White.copy(alpha = 0.96f)
+                                    },
+                                    Blue.copy(alpha = if (darkTheme) 0.22f else 0.14f),
+                                    if (darkTheme) {
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+                                    } else {
+                                        Color.White.copy(alpha = 0.82f)
+                                    }
+                                )
+                            )
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (darkTheme) {
+                                Color.White.copy(alpha = 0.08f)
+                            } else {
+                                Blue.copy(alpha = 0.08f)
+                            },
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .pointerInput(items, slotWidthPx) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                isDragging = true
+                                coroutineScope.launch {
+                                    bubbleOffset.snapTo(
+                                        (offset.x - (bubbleWidthPx / 2f))
+                                            .coerceIn(bubbleInsetPx, maxOffsetPx)
+                                    )
+                                }
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                val newOffset = (bubbleOffset.value + dragAmount)
+                                    .coerceIn(bubbleInsetPx, maxOffsetPx)
+                                coroutineScope.launch {
+                                    bubbleOffset.snapTo(newOffset)
+                                }
+                            },
+                            onDragEnd = { snapToNearestItem() },
+                            onDragCancel = {
+                                isDragging = false
+                                coroutineScope.launch {
+                                    bubbleOffset.animateTo(
+                                        targetValue = selectedOffsetPx,
+                                        animationSpec = spring(
+                                            dampingRatio = 0.82f,
+                                            stiffness = 420f
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                    }
+                    .pointerInput(items, slotWidthPx) {
+                        detectTapGestures { offset ->
+                            val targetIndex = indexFromOffsetX(offset.x)
+                            settledIndex = targetIndex
+                            val targetOffset = (slotWidthPx * targetIndex) + bubbleInsetPx
+                            coroutineScope.launch {
+                                bubbleOffset.animateTo(
+                                    targetValue = targetOffset,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.82f,
+                                        stiffness = 420f
+                                    )
+                                )
+                            }
+                            onItemClick(items[targetIndex])
+                        }
+                    }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.forEachIndexed { index, item ->
+                    IosTabItem(
+                        item = item,
+                        isSelected = index == previewIndex,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -201,31 +415,29 @@ private fun IosBottomBar(
 private fun IosTabItem(
     item: BottomNavItem,
     isSelected: Boolean,
-    onClick: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    // Spring-based scale pop on selection
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1f else 0.92f,
+    val iconScale by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.9f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "tabScale"
-    )
-
-    // Animated pill background height & alpha
-    val pillAlpha by animateFloatAsState(
-        targetValue = if (isSelected) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow
         ),
-        label = "pillAlpha"
+        label = "iconScale"
+    )
+
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.72f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "contentAlpha"
     )
 
     val iconTint by animateColorAsState(
         targetValue = if (isSelected) Blue
-        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f),
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "iconTint"
     )
@@ -239,31 +451,20 @@ private fun IosTabItem(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .scale(scale)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null   // no ripple — iOS feel
-            ) { onClick() }
-            .padding(horizontal = 20.dp, vertical = 4.dp)
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(24.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        // Icon with pill background
-        Box(
+        Icon(
+            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+            contentDescription = item.label,
+            tint = iconTint,
             modifier = Modifier
-                .height(30.dp)
-                .widthIn(min = 56.dp)
-                .clip(RoundedCornerShape(15.dp))
-                .background(Blue.copy(alpha = (pillAlpha * 0.12f).coerceIn(0f, 1f))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                contentDescription = item.label,
-                tint = iconTint,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+                .size(22.dp)
+                .scale(iconScale)
+        )
 
         Spacer(modifier = Modifier.height(2.dp))
 
@@ -271,7 +472,7 @@ private fun IosTabItem(
             text = item.label,
             fontSize = 10.sp,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            color = labelColor,
+            color = labelColor.copy(alpha = contentAlpha),
             maxLines = 1
         )
     }
