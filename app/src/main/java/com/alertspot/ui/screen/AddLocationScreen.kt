@@ -256,20 +256,17 @@ fun AddLocationScreen(
                         // Save button
                         Button(
                             onClick = {
-                                scope.launch {
-                                    val coord = mapCenter
-                                    val geocodedName = viewModel.reverseGeocode(coord.latitude, coord.longitude)
-                                    val name = geocodedName ?: selectedName.ifBlank { "Alert" }
-                                    val alert = GeofenceLocation(
-                                        name = name,
-                                        latitude = coord.latitude,
-                                        longitude = coord.longitude,
-                                        radius = radius.toDouble(),
-                                        isEnabled = true
-                                    )
-                                    viewModel.addLocation(alert)
-                                    onDismiss()
-                                }
+                                val coord = mapCenter
+                                val name = selectedName.ifBlank { "Alert" }
+                                val alert = GeofenceLocation(
+                                    name = name,
+                                    latitude = coord.latitude,
+                                    longitude = coord.longitude,
+                                    radius = radius.toDouble(),
+                                    isEnabled = true
+                                )
+                                viewModel.addLocation(alert)
+                                onDismiss()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Blue)

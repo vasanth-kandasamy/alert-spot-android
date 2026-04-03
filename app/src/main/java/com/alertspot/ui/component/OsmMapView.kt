@@ -375,9 +375,11 @@ fun OsmMapView(
                 setTileSource(fastMapnik)
 
                 setMultiTouchControls(true)
-                isTilesScaledToDpi = true          // fewer tiles per screen
+                isTilesScaledToDpi = false          // native tile resolution — much fewer tiles to download
+                setTilesScaleFactor(1.5f)           // slight upscale for readability without DPI oversampling
                 isHorizontalMapRepetitionEnabled = false
                 isVerticalMapRepetitionEnabled = false
+                setScrollableAreaLimitLatitude(85.05, -85.05, 0)  // prevent loading void tiles
                 overlayManager.tilesOverlay.loadingBackgroundColor = AndroidColor.rgb(242, 239, 233)
                 overlayManager.tilesOverlay.loadingLineColor = AndroidColor.rgb(220, 218, 212)
 

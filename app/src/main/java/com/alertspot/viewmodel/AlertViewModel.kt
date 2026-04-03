@@ -351,6 +351,21 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        // Async reverse-geocode to get a better name if saved with a generic one
+        if (location.name == "Alert") {
+            viewModelScope.launch {
+                val geocodedName = reverseGeocode(location.latitude, location.longitude)
+                if (geocodedName != null) {
+                    val updatedLocation = location.copy(name = geocodedName)
+                    val newList = _locations.value.map {
+                        if (it.id == location.id) updatedLocation else it
+                    }
+                    _locations.value = newList
+                    preferencesManager.saveLocations(newList)
+                }
+            }
+        }
     }
 
     fun deleteLocation(location: GeofenceLocation) {
@@ -603,6 +618,8 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
                 URL(url).openConnection()
             )!!.apply {
                 setRequestProperty("User-Agent", "AlertSpot-Android/1.0")
+                connectTimeout = 5000
+                readTimeout = 5000
             }
             val json = connection.inputStream.bufferedReader().readText()
             val root = JSONObject(json)

@@ -42,8 +42,8 @@ class AlertSpotApp : Application() {
         config.tileFileSystemCacheMaxBytes = 600L * 1024 * 1024
         config.tileFileSystemCacheTrimBytes = 500L * 1024 * 1024
 
-        // In-memory tile cache — keep more tiles in RAM for instant re-render
-        config.cacheMapTileCount = 36
+        // In-memory tile cache — keep many tiles in RAM for instant re-render on pan
+        config.cacheMapTileCount = 200
 
         // Shorter expiry override so cached tiles are preferred
         config.expirationOverrideDuration = 30L * 24 * 60 * 60 * 1000 // 30 days
