@@ -197,6 +197,53 @@ fun SettingsScreen(
                 )
             }
 
+            // ── SUPPORT ──
+            SectionLabel("SUPPORT")
+            IosCard {
+                IosRow(
+                    icon = Icons.Outlined.Favorite,
+                    iconBg = Red,
+                    title = "Support Development",
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://paypal.me/kvasanth3879"))
+                        context.startActivity(intent)
+                    },
+                    trailing = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+
+            // ── CONTACT US ──
+            SectionLabel("CONTACT US")
+            IosCard {
+                IosRow(
+                    icon = Icons.Outlined.Chat,
+                    iconBg = Green,
+                    title = "WhatsApp Channel",
+                    onClick = {
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://whatsapp.com/channel/0029VbCdJyKDuMRmrQB3A22r")
+                        )
+                        context.startActivity(intent)
+                    },
+                    trailing = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+
             // ── ABOUT ──
             SectionLabel("ABOUT")
             IosCard {
@@ -206,7 +253,7 @@ fun SettingsScreen(
                     title = "Version",
                     trailing = {
                         Text(
-                            "1.0.0",
+                            "1.2.0",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                             style = MaterialTheme.typography.bodyMedium
                         )
