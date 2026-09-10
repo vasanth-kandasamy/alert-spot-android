@@ -197,28 +197,6 @@ fun SettingsScreen(
                 )
             }
 
-            // ── SUPPORT ──
-            SectionLabel("SUPPORT")
-            IosCard {
-                IosRow(
-                    icon = Icons.Outlined.Favorite,
-                    iconBg = Red,
-                    title = "Support Development",
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://paypal.me/kvasanth3879"))
-                        context.startActivity(intent)
-                    },
-                    trailing = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                )
-            }
-
             // ── CONTACT US ──
             SectionLabel("CONTACT US")
             IosCard {

@@ -421,7 +421,19 @@ fun OsmMapView(
                 mapViewRef.value = this
             }
         },
-        update = { /* center/zoom handled by LaunchedEffect */ }
+        update = { /* center/zoom handled by LaunchedEffect */ },
+        onRelease = { view ->
+            // Stop this MapView's own tile-download thread pool and clear its
+            // bitmap cache as soon as it leaves composition. Without this,
+            // every screen navigation (Map → Add/Edit → Map, etc.) leaves the
+            // old MapView's downloader threads running in the background,
+            // competing for CPU/network with whichever map is now visible and
+            // slowing its tile loading down.
+            view.onDetach()
+            if (mapViewRef.value === view) {
+                mapViewRef.value = null
+            }
+        }
     )
 }
 

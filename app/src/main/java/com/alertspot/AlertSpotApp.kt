@@ -32,8 +32,10 @@ class AlertSpotApp : Application() {
         if (!tileCache.exists()) tileCache.mkdirs()
         config.osmdroidTileCache = tileCache
 
-        // Maximize download concurrency
-        config.tileDownloadThreads = 8
+        // Keep concurrent tile downloads within the OSM tile usage policy
+        // (https://operations.osmfoundation.org/policies/tiles/) to avoid the
+        // app's User-Agent/IPs being rate-limited or blocked by tile.openstreetmap.org.
+        config.tileDownloadThreads = 2
         config.tileFileSystemThreads = 6
         config.tileDownloadMaxQueueSize = 40
         config.tileFileSystemMaxQueueSize = 40

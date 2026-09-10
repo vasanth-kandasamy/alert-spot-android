@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Looper
@@ -17,6 +18,7 @@ import com.alertspot.model.AlertHistoryEntry
 import com.alertspot.model.GeofenceLocation
 import com.alertspot.model.SearchResult
 import com.alertspot.service.GeofenceBroadcastReceiver
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -37,6 +39,11 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _currentLocation = MutableStateFlow<Location?>(null)
     val currentLocation: StateFlow<Location?> = _currentLocation.asStateFlow()
+
+    // Non-null when the device's location toggle (e.g. GPS) is off and needs
+    // the user to confirm the system "turn on location" prompt.
+    private val _locationSettingsIssue = MutableStateFlow<IntentSender?>(null)
+    val locationSettingsIssue: StateFlow<IntentSender?> = _locationSettingsIssue.asStateFlow()
 
     private val _alertHistory = MutableStateFlow<List<AlertHistoryEntry>>(emptyList())
     val alertHistory: StateFlow<List<AlertHistoryEntry>> = _alertHistory.asStateFlow()
@@ -153,6 +160,8 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        checkLocationSettings(request)
+
         try {
             fusedLocationClient.requestLocationUpdates(
                 request, locationCallback!!, Looper.getMainLooper()
@@ -163,6 +172,25 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
         refreshMonitoredGeofences()
         startGeofenceCheckLoop()
+    }
+
+    /** Detects a disabled location toggle (GPS off) so the caller can prompt the system dialog to enable it. */
+    private fun checkLocationSettings(request: LocationRequest) {
+        val settingsRequest = LocationSettingsRequest.Builder().addLocationRequest(request).build()
+        LocationServices.getSettingsClient(getApplication<Application>())
+            .checkLocationSettings(settingsRequest)
+            .addOnFailureListener { e ->
+                if (e is ResolvableApiException) {
+                    Log.w(TAG, "⚠️ Location is off on this device — requesting user to enable it")
+                    _locationSettingsIssue.value = e.resolution.intentSender
+                } else {
+                    Log.e(TAG, "Location settings check failed", e)
+                }
+            }
+    }
+
+    fun onLocationSettingsPromptHandled() {
+        _locationSettingsIssue.value = null
     }
 
     fun stopMonitoring() {

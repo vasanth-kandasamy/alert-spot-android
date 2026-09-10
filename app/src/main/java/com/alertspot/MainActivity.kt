@@ -10,6 +10,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +62,14 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* notification permission result */ }
 
+    private val locationSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        Log.d(TAG, "Location settings prompt result: ${result.resultCode}")
+        // Whether accepted or dismissed, re-check monitoring so it resumes if now enabled
+        alertViewModel?.startMonitoring()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -74,12 +83,21 @@ class MainActivity : ComponentActivity() {
             val isDarkMode by vm.isDarkMode.collectAsState()
             val isAlarmPlaying by vm.isAlarmPlaying.collectAsState()
             val alarmLocationName by vm.alarmLocationName.collectAsState()
+            val locationSettingsIssue by vm.locationSettingsIssue.collectAsState()
 
             // Ensure monitoring starts when Compose is ready
             // (handles case where permissions were already granted)
             LaunchedEffect(Unit) {
                 Log.d(TAG, "LaunchedEffect: ensuring monitoring is started")
                 vm.startMonitoring()
+            }
+
+            // Prompt the system "turn on location" dialog when GPS is off
+            LaunchedEffect(locationSettingsIssue) {
+                locationSettingsIssue?.let { intentSender ->
+                    locationSettingsLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                    vm.onLocationSettingsPromptHandled()
+                }
             }
 
             AlertSpotTheme(darkTheme = isDarkMode) {

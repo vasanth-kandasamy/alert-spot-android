@@ -1,7 +1,6 @@
 # AlertSpot — Location-Based Alarm App for Android
 
 [![Download APK](https://img.shields.io/badge/Download-APK-3DDC84?logo=android&logoColor=white)](https://github.com/vasanth-kandasamy/alert-spot-android/raw/main/alert-spot.apk)
-[![Donate](https://img.shields.io/badge/donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/kvasanth3879)
 
 **AlertSpot** is a free, open-source Android app that wakes you up with a loud alarm when you reach your destination. Set a GPS geofence on any location, and AlertSpot will automatically trigger an alarm — with sound, vibration, and a full-screen notification — so you never miss your stop again.
 
@@ -103,12 +102,4 @@ AlertSpot requires the following permissions to function:
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
-## Support This Project
-
-AlertSpot is free and open-source, maintained in my spare time. If it's useful to you, consider supporting its development:
-
-[![Donate via PayPal](https://img.shields.io/badge/donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/kvasanth3879)
-
-Every bit of support helps keep the app free, ad-free, and actively maintained.
 
