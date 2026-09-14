@@ -99,6 +99,11 @@ AlertSpot requires the following permissions to function:
 3. **You arrive** — When you enter the geofence radius, a loud alarm fires with sound + vibration + full-screen notification
 4. **Dismiss** — Tap the notification or the full-screen overlay to stop the alarm
 
+### Support the Launch
+If you find AlertSpot useful and want to help me publish it to the Google Play Store, consider supporting the one-time $25 registration fee:
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/kvasanth)
+
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
