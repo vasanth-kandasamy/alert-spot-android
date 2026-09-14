@@ -34,9 +34,13 @@ fun MapScreen(
     // Increment this to force map re-center (even to same coords)
     var centerTrigger by remember { mutableIntStateOf(0) }
     var hasCenteredOnUser by remember { mutableStateOf(false) }
+    // Set by the "my location" button so we recenter as soon as a fresh fix arrives,
+    // even if we already auto-centered once on app open.
+    var recenterPending by remember { mutableStateOf(false) }
     LaunchedEffect(currentLocation) {
-        if (!hasCenteredOnUser && currentLocation != null) {
+        if (currentLocation != null && (!hasCenteredOnUser || recenterPending)) {
             hasCenteredOnUser = true
+            recenterPending = false
             mapCenter = GeoPoint(currentLocation!!.latitude, currentLocation!!.longitude)
             centerTrigger++
         }
@@ -84,6 +88,10 @@ fun MapScreen(
                         mapCenter = GeoPoint(it.latitude, it.longitude)
                         centerTrigger++
                     }
+                    // Also fetch a fresh fix in case the cached value is null/stale;
+                    // the LaunchedEffect above will recenter once it arrives.
+                    recenterPending = true
+                    viewModel.requestCurrentLocation()
                 },
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = Blue,

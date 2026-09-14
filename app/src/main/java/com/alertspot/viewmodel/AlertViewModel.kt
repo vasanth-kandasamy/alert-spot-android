@@ -20,6 +20,7 @@ import com.alertspot.model.SearchResult
 import com.alertspot.service.GeofenceBroadcastReceiver
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.*
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONObject
@@ -105,6 +106,31 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopMonitoring()
+    }
+
+    /** Actively requests a fresh fix (used by the "current location" button so it
+     *  doesn't just sit on a null/stale cached value while waiting for the next
+     *  periodic update). */
+    fun requestCurrentLocation() {
+        if (!hasLocationPermission()) {
+            Log.d(TAG, "⚠️ requestCurrentLocation: permission not granted")
+            return
+        }
+        try {
+            fusedLocationClient.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                CancellationTokenSource().token
+            ).addOnSuccessListener { location ->
+                if (location != null) {
+                    Log.d(TAG, "📍 Fresh current location: ${location.latitude}, ${location.longitude}")
+                    _currentLocation.value = location
+                } else {
+                    Log.d(TAG, "⚠️ getCurrentLocation returned null")
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException getting current location", e)
+        }
     }
 
     // MARK: - Monitoring
@@ -678,9 +704,15 @@ class AlertViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun hasLocationPermission(): Boolean {
         val ctx: Application = getApplication()
-        return ActivityCompat.checkSelfPermission(
+        val fineGranted = ActivityCompat.checkSelfPermission(
             ctx, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ActivityCompat.checkSelfPermission(
+            ctx, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        // Coarse-only ("Approximate location") still lets FusedLocationProviderClient
+        // return updates -- required so current-location/blue-dot doesn't stay stuck forever.
+        return fineGranted || coarseGranted
     }
 
     val activeAlertCount: Int

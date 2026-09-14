@@ -37,9 +37,10 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        Log.d(TAG, "Location permission result: fineGranted=$fineGranted")
-        if (fineGranted) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        Log.d(TAG, "Location permission result: fineGranted=$fineGranted, coarseGranted=$coarseGranted")
+        if (fineGranted || coarseGranted) {
+            if (fineGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
             }
             startLocationService()
